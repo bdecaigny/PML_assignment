@@ -1,0 +1,76 @@
+---
+title: "Practical Machine Learning - Assignment"
+author: "B Decaigny"
+date: "23 August 2015"
+output: html_document
+---
+
+First thing we notice when loading the training set, is the size of it: Almost 20K obesrvations, for 160 variables. A visual approach to get a grip on it is not impossible... But where to start? Let's try a different approach, and just look at the summary of the data. Quite a few variables have vary little variation, maybe with nearZeroVariance, we can eliminate some?
+
+```{r}
+library(caret)
+train <- read.csv("pml-training.csv")
+test <- read.csv("pml-testing.csv")
+wholeset <- nearZeroVar(train, saveMetrics=TRUE)
+```
+
+Unfortunately - at first glance: we can't. (see output at the end of this document). But there's something peculiar related to some of the first variables, 'new_window'. We don't have much information about it, but it rather seems some circumstantial data (like user_name, timestamp etc). than actual measurements. This variable cuts the data in two, with one large set ('no', 19216 records; 'yes', 406 records). It might be a bold move to neglect a bit the variance in theat second part, but we can make progress: if we check for nearZeroVariance in that first group, we can bring the 'useful' variables down to 59. (see output at the end of this document). We can then further still strip off some of those circumstantial variables (X (which is a row number), user_name, the three timestamp fields, and the window number. 
+
+
+```{r}
+new_w <- train[,'new_window']
+# get a vecto where the var is 'yes'
+nonew <- new_w == "yes"
+# create a subset of the data frame with only the 'no' rows
+train2 <- train[!nonew,]
+#check with nsv which variabels we can drop
+nsv2 <- nearZeroVar(train2, saveMetrics=TRUE)
+param_to_keep <- nsv2$nzv == FALSE
+#with the full set... or should I build the model with the reduced set only?
+trainredux <- train[,param_to_keep]
+#trainredux <- train2[,param_to_keep]
+testredux <- test[,param_to_keep]
+trainredux2 <- trainredux[,(colnames(trainredux) != 'X')]
+testredux2 <- testredux[,(colnames(testredux) != 'X')]
+trainredux2 <- trainredux2[,(colnames(trainredux2) != 'user_name')]
+testredux2 <- testredux2[,(colnames(testredux2) != 'user_name')]
+trainredux2 <- trainredux2[,(colnames(trainredux2) != 'raw_timestamp_part_1')]
+testredux2 <- testredux2[,(colnames(testredux2) != 'raw_timestamp_part_1')]
+trainredux2 <- trainredux2[,(colnames(trainredux2) != 'raw_timestamp_part_2')]
+testredux2 <- testredux2[,(colnames(testredux2) != 'raw_timestamp_part_2')]
+trainredux2 <- trainredux2[,(colnames(trainredux2) != 'cvtd_timestamp')]
+testredux2 <- testredux2[,(colnames(testredux2) != 'cvtd_timestamp')]
+trainredux2 <- trainredux2[,(colnames(trainredux2) != 'num_window')]
+testredux2 <- testredux2[,(colnames(testredux2) != 'num_window')]
+testredux2 <- testredux2[,(colnames(testredux2) != 'problem_id')]
+```
+
+The nature of the problem is a classification question (which of the five types of exercise execution is this), thus a linear model is not very appropriate, a regression tree is more useful.
+```{r}
+library(rpart)
+treefit <- rpart(classe ~ ., trainredux2, method="class")
+outcome <- predict(treefit, newdata=testredux2)
+outcome
+```
+
+##Out of sample error
+Though the volume of test & training data doesn't say much, we've got 19622 observations to train our model (*), and 20 test entries. I would assume therefore the out of test error to be small, but on the other hand, there is a risk for overfitting.
+My assumption turned out to be overly optimistic anyway: only 14 out of the 20 tests had a correct prediction.
+
+(*) yes, I took the liberty not to split the data set in two set - a training and a testing one, even though it was repeated more than enough in the course that that's the way to do it. Why didn't I do it then - it's not that I can't (enough examples in the slides, and the knowledge was already necessary in the quizzes too). It's a (personal) interpretation of the assignment: there's a training set, and a test set. Yes, I could have split the training set in training and validation - but that's optional (and time was not always on my side here). Thus I've opted for this approach: all training data for training, and the test part of the assignment for testing...
+
+##Data Source Disclaimer
+Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H. Qualitative Activity Recognition of Weight Lifting Exercises. Proceedings of 4th International Conference in Cooperation with SIGCHI (Augmented Human '13) . Stuttgart, Germany: ACM SIGCHI, 2013.
+
+Read more: http://groupware.les.inf.puc-rio.br/har#ixzz3jeAbc8Yk
+
+
+##Annex
+nearZerovariance without taking 'new_window' into account:
+```{r}
+wholeset
+```
+nearZerovariance when only selecting 'new_window' is no:
+```{r}
+nsv2
+```
